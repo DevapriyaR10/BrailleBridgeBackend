@@ -7,11 +7,12 @@ import { fallbackBraille } from '../utils/brailleConverter.js';
 import { uploadBufferToCloudinary } from '../utils/cloudinary.js';
 import { logger } from '../utils/logger.js';
 import File from '../models/File.js';
-import { generateSpeechAndUpload } from '../utils/ttsEngine.js'; // use new cloud-based TTS
+import { generateSpeechAndUpload } from '../utils/ttsEngine.js';
+
 const { getDocument } = pdfjs;
 
 // -------------------
-// Download file buffer from Cloudinary
+// Download file from Cloudinary
 // -------------------
 const downloadFromCloudinary = async (url) => {
   const res = await fetch(url);
@@ -47,7 +48,7 @@ async function extractText(buffer, originalname) {
 }
 
 // -------------------
-// Convert text to Braille using Liblouis (or fallback)
+// Convert text → Braille
 // -------------------
 async function convertWithLiblouis(text) {
   const louTranslate = "C:\\liblouis-3.35.0-win64\\bin\\lou_translate.exe";
@@ -83,7 +84,7 @@ async function convertWithLiblouis(text) {
 }
 
 // -------------------
-// Convert to Braille (uploads to Cloudinary)
+// Convert to Braille (upload both files)
 // -------------------
 export const convertToBrailleController = async (req, res) => {
   try {
@@ -97,11 +98,13 @@ export const convertToBrailleController = async (req, res) => {
     const text = await extractText(buffer, file.originalname);
     const { g2, unicode } = await convertWithLiblouis(text);
 
-    // Convert strings to Buffers for Cloudinary upload
+    // Convert to Buffers for upload
     const g2Buffer = Buffer.from(g2, 'utf-8');
     const unicodeBuffer = Buffer.from(unicode, 'utf-8');
 
     logger.debug('Uploading Braille outputs to Cloudinary...');
+
+    // Upload BRF (Grade 2 Braille)
     const g2Upload = await uploadBufferToCloudinary(g2Buffer, {
       folder: `braillebridge/converted/braille/${req.user._id}`,
       public_id: `${file._id}-g2`,
@@ -109,6 +112,7 @@ export const convertToBrailleController = async (req, res) => {
       format: 'brf',
     });
 
+    // Upload Unicode Braille text (.txt)
     const unicodeUpload = await uploadBufferToCloudinary(unicodeBuffer, {
       folder: `braillebridge/converted/braille/${req.user._id}`,
       public_id: `${file._id}-unicode`,
@@ -116,12 +120,15 @@ export const convertToBrailleController = async (req, res) => {
       format: 'txt',
     });
 
+    // Save both URLs in DB
     file.convertedType = 'braille';
     file.converted_public_id = g2Upload.public_id;
     file.converted_url = g2Upload.secure_url;
+    file.braille_unicode_public_id = unicodeUpload.public_id;
+    file.braille_unicode_url = unicodeUpload.secure_url;
     await file.save();
 
-    logger.info('Braille files uploaded to Cloudinary successfully.');
+    logger.info('Braille files uploaded successfully.');
     res.json({
       message: 'Braille conversion complete.',
       g2_url: g2Upload.secure_url,
@@ -136,7 +143,7 @@ export const convertToBrailleController = async (req, res) => {
 };
 
 // -------------------
-// Convert to Speech (uploads to Cloudinary)
+// Convert to Speech (upload to Cloudinary)
 // -------------------
 export const convertToSpeechController = async (req, res) => {
   try {
