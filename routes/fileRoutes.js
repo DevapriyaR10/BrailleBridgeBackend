@@ -1,5 +1,5 @@
 import express from 'express';
-import { upload, uploadFile, getUserFiles } from '../controllers/fileController.js';
+import { upload, uploadFile, getUserFiles, deleteFile } from '../controllers/fileController.js';
 import { protect } from '../middleware/authMiddleware.js';
 import { logger } from '../utils/logger.js';
 
@@ -16,5 +16,8 @@ router.post('/upload', protect, upload.single('file'), uploadFile);
 
 // 📂 Get all files for a user
 router.get('/', protect, getUserFiles);
+
+// ❌ Delete a file by ID
+router.delete('/:id', protect, deleteFile);
 
 export default router;
